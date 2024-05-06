@@ -1,12 +1,6 @@
 **Proje Talimatları**
 
-**1:** 5 node'lu "1 Master + 4 Worker Node" bir Kubernetes cluster kurun.
-# AWS de EKS yi kullanacağım bundan dolayı öncelikle bir freetier kapsamında t2.micro ec2 ayağa kaldırıp bağlananıyorum.
-- güncelleme yapıyorum 
-```bash
-sudo dnf update -y
-```
- 
+**1:** 5 node'lu "1 Master + 4 Worker Node" bir Kubernetes cluster kurun. 
 
 **2:** "test" ve "production" adlarında 2 namespace oluşturun.
 
