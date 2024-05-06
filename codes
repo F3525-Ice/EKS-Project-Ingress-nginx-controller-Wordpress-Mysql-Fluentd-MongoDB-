@@ -1,0 +1,182 @@
+1.
+# güncelleme yapıyorum, kubectl indirdim-execute yetkisi verdim-env variable yaptım-bashrc'ye ekledim, eksctl indirdim, workerlara bağlanmak için ssh-keygen kullandım ve üzerinde bulunduğum ec2 için configure yaptım
+
+```bash
+sudo dnf update -y
+curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.3/2024-04-19/bin/linux/amd64/kubectl
+chmod +x ./kubectl
+mkdir -p $HOME/bin && cp ./kubectl $HOME/bin/kubectl && export PATH=$HOME/bin:$PATH
+echo 'export PATH=$HOME/bin:$PATH' >> ~/.bashrc
+curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz"
+tar -xzf eksctl_$(uname -s)_amd64.tar.gz -C /tmp && rm eksctl_$(uname -s)_amd64.tar.gz
+sudo mv /tmp/eksctl /usr/local/bin
+ssh-keygen -f ~/.ssh/id_rsa
+aws configure
+```
+
+# cluster oluşturuken girebileceğim komutları aşağıdaki komutla görebilirim
+```bash
+eksctl create cluster --help
+``` 
+```bash
+eksctl create cluster \
+ --name cw-cluster \
+ --region us-east-1 \
+ --zones us-east-1a,us-east-1b,us-east-1c \
+ --nodegroup-name my-nodes \
+ --node-type t3a.medium \
+ --nodes 4 \
+ --nodes-min 4 \
+ --nodes-max 4 \
+ --ssh-access \
+ --ssh-public-key  ~/.ssh/id_rsa.pub \
+ --managed
+```
+
+2. 
+```bash
+kubectl create namespace test
+kubectl create namespace production
+``` 
+or
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+```
+or
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+```
+
+3.
+```
+kubectl apply -f ./yaml/jr-production-rb.yaml
+
+kubectl apply -f ./yaml/jr-test-rb.yaml
+
+kubectl apply -f ./yaml/sr-cluster-crb.yaml
+
+kubectl apply -f ./yaml/sr-production-rb.yaml
+
+kubectl apply -f ./yaml/sr-test-rb.yaml
+```
+
+4.
+# Şimdi nginx ingress için controller kuaralım.- Open the offical [ingress-nginx]( https://kubernetes.github.io/ingress-nginx/deploy/ ) explain the `ingress-controller` installation steps for different architecture.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.2/deploy/static/provider/aws/deploy.yaml
+```
+
+5.
+```
+ node1=$(kubectl get no -o jsonpath="{.items[1].metadata.name}")
+
+ node2=$(kubectl get no -o jsonpath="{.items[2].metadata.name}")
+
+ node3=$(kubectl get no -o jsonpath="{.items[3].metadata.name}")
+
+ kubectl taint node $node1 tier=production:NoSchedule
+
+ kubectl taint node $node2 tier=production:NoSchedule
+
+ kubectl taint node $node3 tier=production:NoSchedule
+
+ kubectl label node $node1 tier=production
+
+ kubectl label node $node2 tier=production
+
+ kubectl label node $node3 tier=production
+```
+
+6.
+```
+kubectl create secret generic mysql-test-secret -n test --from-file=MYSQL_ROOT_PASSWORD=./yaml/mysql_root_password.txt --from-file=MYSQL_USER=./yaml/mysql_user.txt --from-file=MYSQL_PASSWORD=./yaml/mysql_password.txt --from-file=MYSQL_DATABASE=./yaml/mysql_database.txt
+
+kubectl create secret generic mysql-prod-secret -n production --from-file=MYSQL_ROOT_PASSWORD=./yaml/mysql_root_password.txt --from-file=MYSQL_USER=./yaml/mysql_user.txt --from-file=MYSQL_PASSWORD=./yaml/mysql_password.txt --from-file=MYSQL_DATABASE=./yaml/mysql_database.txt
+
+kubectl apply -f ./yaml/wptest.yaml
+
+kubectl apply -f ./yaml/wpprod.yaml
+```
+
+7.
+```
+kubectl apply -f ./yaml/wpingress.yaml
+```
+
+8.
+```
+kubectl apply -f ./yaml/deployment.yaml
+```
+
+9.
+```
+$ kubectl expose deployment k8s-deployment --type=LoadBalancer -n production
+```
+
+10.
+```
+$ kubectl scale deployment k8s-deployment --replicas=3 -n production
+
+$ kubectl scale deployment k8s-deployment --replicas=10 -n production
+
+$ kubectl set image deployment/k8s-deployment k8s=ozgurozturknet/k8s:v2 -n production
+```
+
+11.
+```
+$ kubectl apply -f ./yaml/daemonset.yaml
+```
+
+12.
+```
+$ kubectl apply -f ./yaml/statefulset.yaml
+
+$ kubectl exec -it mongostatefulset-0 -- bash
+
+root@mongostatefulset-0:/# mongo
+
+> rs.initiate({ _id: "MainRepSet", version: 1, 
+members: [ 
+ { _id: 0, host: "mongostatefulset-0.mongo-svc.default.svc.cluster.local:27017" }, 
+ { _id: 1, host: "mongostatefulset-1.mongo-svc.default.svc.cluster.local:27017" } ]});
+
+MainRepSet:PRIMARY> db.getSiblingDB("admin").createUser({
+...       user : "mongoadmin",
+...       pwd  : "P@ssw0rd!1",
+...       roles: [ { role: "root", db: "admin" } ]
+...  });
+
+MainRepSet:PRIMARY> rs.status();
+
+```
+
+13.
+```
+kubectl apply -f ./yaml/serviceaccount.yaml
+
+kubectl exec -it pod-proje -- bash
+
+bash-5.0# CERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+bash-5.0# TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+
+bash-5.0# curl --cacert $CERT https://kubernetes/api/v1/pods --header "Authorization:Bearer $TOKEN" | jq '.items[].metadata.name'
+
+```
+
+14.
+```
+nodedrain=$(kubectl get no -o jsonpath="{.items[3].metadata.name}")
+
+kubectl drain $nodedrain --ignore-daemonsets --delete-local-data
+
+kubectl cordon $nodedrain
+
+```
